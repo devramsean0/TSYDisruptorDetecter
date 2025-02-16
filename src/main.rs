@@ -1,21 +1,33 @@
-use std::ops::Deref;
 use scraper::selectable::Selectable;
+use log::{info};
 
+mod migrations;
+
+#[derive(Clone)]
 struct PartialDisruption {
     title: String,
     dates: String,
 }
+#[derive(Clone, Debug)]
 struct Disruption {
+    id: Option<String>,
     title: String,
     posted_on: String,
     dates: String,
     reason: String,
     description: String,
     impact: String,
-    details: Vec<String>,
+    details: String,
+    hash: String,
 }
 
-fn do_fetch() {
+struct DisruptionDiff {
+    new: Vec<Disruption>,
+    changed: Vec<Disruption>,
+    removed: Vec<Disruption>,
+}
+
+fn do_fetch() -> Vec<Disruption> {
     let mut disruptions: Vec<Disruption> = vec![];
     let mut partial_disruptions: Vec<PartialDisruption> = vec![];
     let client = reqwest::blocking::Client::new();
@@ -49,7 +61,7 @@ fn do_fetch() {
         let title = title_element.unwrap_or_default();
         let split_title = title.trim().split("-").collect::<Vec<_>>()[0].replace("\u{a0}", "");
         let split_dates = title.trim().split("-").collect::<Vec<_>>()[1].replace("\n", "").replace(" ", "").replace("to", " to ").replace(";", ", ");
-        println!("Disruption found: {}: {}", split_title, split_dates);
+        info!("Disruption found: {}: {}", split_title, split_dates);
         partial_disruptions.push(PartialDisruption {
             title: split_title,
             dates: split_dates
@@ -86,7 +98,7 @@ fn do_fetch() {
             .next()
             .map(|p| p.text().collect::<String>());
         let impact = impact_element.unwrap_or_default();
-        let concat_impact = impact.trim().replace("Impact: ", "");
+        let concat_impact = impact.trim().replace("Impact:", "");
         // Details
         let mut details_blocks: Vec<String> = vec![];
         let details_elements = disruption.select(&disruption_data_details_selector);
@@ -100,20 +112,125 @@ fn do_fetch() {
             details_blocks.push(concat_detail)
         }
         // Get PartialDisruption
-        let partial = partial_disruptions.get(count).unwrap().deref();
+        let partial = partial_disruptions.get(count).unwrap().clone();
+        // Calculate Hash of Disruption
+        let hash = format!("{:x}", md5::compute(format!("{}-{}-{}-{}-{}-{}-{}", partial.title.clone(), partial.dates.clone(), concat_posted_on.clone(), concat_reason.clone(), concat_description.clone(), concat_impact.clone(), details_blocks.join("\n"))));
+        info!("Complete Hash for disruption {}: {}", partial.title, hash);
         disruptions.push(Disruption {
+            id: None,
             title: partial.title,
             dates: partial.dates,
             posted_on: concat_posted_on,
             reason: concat_reason,
             description: concat_description,
             impact: concat_impact,
-            details: details_blocks
+            details: details_blocks.join("\n"),
+            hash
         });
-        println!("Disruption Information found");
+        count += 1;
+        info!("Disruption information found");
+    }
+    disruptions
+}
+
+fn save_to_db(disruptions: &Vec<Disruption>, conn: &rusqlite::Connection) -> rusqlite::Result<Vec<Disruption>> {
+    let mut disruptions_with_id: Vec<Disruption> = vec![];
+    for disruption in disruptions {
+        info!("Calculating Hash for disruption: {}", disruption.title);
+        let hash = format!("{:x}", md5::compute(format!("{}-{}", disruption.title.clone(), disruption.posted_on.clone())));
+        info!("Hash for disruption: {} is: {:?}", disruption.title, hash);
+        conn.execute(
+            "INSERT INTO disruptions(id, title, dates, posted_on, reason, description, impact, details, hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id)
+            DO
+                UPDATE SET title = ?2, dates = ?3, posted_on = ?4, reason = ?5, description = ?6, impact = ?7, details = ?8, hash = ?9",
+            (&hash, &disruption.title, &disruption.dates, &disruption.posted_on, &disruption.reason, &disruption.description, &disruption.impact, &disruption.details, &disruption.hash)
+        )?;
+        disruptions_with_id.push(Disruption {
+            id: Option::from(hash),
+            title: disruption.title.clone(),
+            dates: disruption.dates.clone(),
+            posted_on: disruption.posted_on.clone(),
+            reason: disruption.reason.clone(),
+            description: disruption.description.clone(),
+            impact: disruption.impact.clone(),
+            details: disruption.details.clone(),
+            hash: disruption.hash.clone()
+        });
+        info!("Disruption: {} attempted to save to DB", disruption.title);
+
+    }
+    Ok(disruptions_with_id)
+}
+
+fn diff_disruptions(old_disruptions: Vec<Disruption>, new_disruptions: &Vec<Disruption>) -> DisruptionDiff {
+    // Calculate New Disruptions
+    let mut new: Vec<Disruption> = vec![];
+    let mut changed: Vec<Disruption> = vec![];
+    let mut removed: Vec<Disruption> = vec![];
+
+    for disruption in new_disruptions {
+        let old_disruption = old_disruptions.iter().find(|x| x.id == disruption.id);
+        match old_disruption {
+            Some(old) => {
+                if old.hash != disruption.hash {
+                    info!("[DIFFER] Disruption: {} has changed", disruption.title);
+                    changed.push(disruption.clone());
+                }
+            },
+            None => {
+                info!("[DIFFER] Disruption: {} is new", disruption.title);
+                new.push(disruption.clone());
+            }
+        }
+    };
+    for disruption in old_disruptions {
+        if !new_disruptions.iter().any(|x| x.id == disruption.id) {
+            info!("[DIFFER] Disruption: {} has been removed", disruption.title);
+            removed.push(disruption.clone());
+        }
+    };
+    DisruptionDiff {
+        new,
+        changed,
+        removed
     }
 }
 
-fn main() {
-    do_fetch()
+fn main() -> rusqlite::Result<()> {
+    dotenv::dotenv().ok();
+    env_logger::init();
+    // Init DB
+    let conn = rusqlite::Connection::open("disruptions.db")?;
+    migrations::engine::run_migrations(&conn);
+    // Get New and Old Disruptions, then diff
+    let old_disruptions = conn
+        .prepare("SELECT * FROM disruptions")?
+        .query_map([], |row| {
+            Ok(Disruption {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                dates: row.get(2)?,
+                posted_on: row.get(3)?,
+                reason: row.get(4)?,
+                description: row.get(5)?,
+                impact: row.get(6)?,
+                details: row.get(7)?,
+                hash: row.get(8)?,
+            })
+        })?
+        .map(|x| x.unwrap())
+        .collect::<Vec<Disruption>>();
+    let disruptions = do_fetch();
+    let disruptions = save_to_db(&disruptions, &conn)?;
+    let diff = diff_disruptions(old_disruptions, &disruptions);
+    for disruption in diff.removed {
+        // Clear up old disruptions from DB
+        if !disruption.id.is_none() {
+            conn.execute("DELETE FROM disruptions WHERE id = ?", (disruption.id.unwrap().to_string(), ))?;
+            info!("Disruption: {} has been removed from DB", disruption.title);
+        }
+    }
+    Ok(())
 }

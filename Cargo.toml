@@ -1,8 +1,13 @@
 [package]
-name = "TSYDisruptorDetecter"
+name = "tsy_disruptor_detecter"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+dotenv = "0.15.0"
+env_logger = "0.11.6"
 reqwest = { version = "0.12.12", features = ["blocking"] }
 scraper = "0.22.0"
+log = "0.4.25"
+md5 = "0.7.0"
+rusqlite = { version = "0.33.0", features = ["bundled"] }
