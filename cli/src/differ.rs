@@ -41,6 +41,7 @@ pub fn save_diffs_to_db(diff: DisruptionDiff, conn: &rusqlite::Connection) -> ru
             conn.execute("INSERT INTO disruptions_diffs(id, disruption_id, state)
             VALUES (NULL, ?, ?)
             ", (disruption.id.unwrap().to_string(), 0, ))?;
+            info!("Disruption update for: {}, saved to diff", disruption.title);
         }
     }
     for disruption in diff.changed {
@@ -48,6 +49,7 @@ pub fn save_diffs_to_db(diff: DisruptionDiff, conn: &rusqlite::Connection) -> ru
             conn.execute("INSERT INTO disruptions_diffs(id, disruption_id, state)
             VALUES (NULL, ?, ?)
             ", (disruption.id.unwrap().to_string(), 1, ))?;
+            info!("Disruption update for: {}, saved to diff", disruption.title);
         }
     }
     for disruption in diff.removed {
@@ -58,6 +60,7 @@ pub fn save_diffs_to_db(diff: DisruptionDiff, conn: &rusqlite::Connection) -> ru
             VALUES (NULL, ?, ?)
             ", (disruption.clone().title, 2, ))?;
             info!("Disruption: {} has been removed from DB", disruption.title);
+            info!("Disruption update for: {}, saved to diff", disruption.title);
         }
     }
     Ok(())

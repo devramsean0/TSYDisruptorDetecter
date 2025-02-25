@@ -4,6 +4,7 @@ process.env.NODE_ENV ??= 'development';
 import { ApplicationCommandRegistries, RegisterBehavior } from '@sapphire/framework';
 import '@sapphire/plugin-logger/register';
 import '@sapphire/plugin-subcommands/register';
+import '@sapphire/plugin-scheduled-tasks'
 import { setup, type ArrayString } from '@skyra/env-utilities';
 import * as colorette from 'colorette';
 import { join } from 'path';
@@ -25,5 +26,7 @@ colorette.createColors({ useColor: true });
 declare module '@skyra/env-utilities' {
 	interface Env {
 		OWNERS: ArrayString;
+		REDIS_HOST: string;
+		REDIS_DB: number;
 	}
 }
