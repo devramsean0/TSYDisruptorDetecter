@@ -22,6 +22,15 @@ fn migrations() -> Vec<Migration> {
         Migration {
             name: "create_complete_hash_on_disruptions",
             sql: "ALTER TABLE disruptions ADD COLUMN hash TEXT NOT NULL DEFAULT ''"
+        },
+        Migration {
+            name: "create_migration_diff_state_table",
+            sql: "CREATE TABLE IF NOT EXISTS disruptions_diffs (
+                id INTEGER PRIMARY KEY,
+                disruption_id TEXT,
+                disruption_name TEXT,
+                state INTEGER NOT NULL
+            )"
         }
     ]
 }

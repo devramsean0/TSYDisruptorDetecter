@@ -2,6 +2,7 @@ use scraper::selectable::Selectable;
 use log::{info};
 
 mod migrations;
+mod differ;
 
 #[derive(Clone)]
 struct PartialDisruption {
@@ -164,46 +165,14 @@ fn save_to_db(disruptions: &Vec<Disruption>, conn: &rusqlite::Connection) -> rus
     Ok(disruptions_with_id)
 }
 
-fn diff_disruptions(old_disruptions: Vec<Disruption>, new_disruptions: &Vec<Disruption>) -> DisruptionDiff {
-    // Calculate New Disruptions
-    let mut new: Vec<Disruption> = vec![];
-    let mut changed: Vec<Disruption> = vec![];
-    let mut removed: Vec<Disruption> = vec![];
-
-    for disruption in new_disruptions {
-        let old_disruption = old_disruptions.iter().find(|x| x.id == disruption.id);
-        match old_disruption {
-            Some(old) => {
-                if old.hash != disruption.hash {
-                    info!("[DIFFER] Disruption: {} has changed", disruption.title);
-                    changed.push(disruption.clone());
-                }
-            },
-            None => {
-                info!("[DIFFER] Disruption: {} is new", disruption.title);
-                new.push(disruption.clone());
-            }
-        }
-    };
-    for disruption in old_disruptions {
-        if !new_disruptions.iter().any(|x| x.id == disruption.id) {
-            info!("[DIFFER] Disruption: {} has been removed", disruption.title);
-            removed.push(disruption.clone());
-        }
-    };
-    DisruptionDiff {
-        new,
-        changed,
-        removed
-    }
-}
-
 fn main() -> rusqlite::Result<()> {
     dotenv::dotenv().ok();
     env_logger::init();
     // Init DB
     let conn = rusqlite::Connection::open("disruptions.db")?;
     migrations::engine::run_migrations(&conn);
+    // Clear out old diffs
+    conn.execute("DELETE FROM disruptions_diffs", ())?;
     // Get New and Old Disruptions, then diff
     let old_disruptions = conn
         .prepare("SELECT * FROM disruptions")?
@@ -224,13 +193,7 @@ fn main() -> rusqlite::Result<()> {
         .collect::<Vec<Disruption>>();
     let disruptions = do_fetch();
     let disruptions = save_to_db(&disruptions, &conn)?;
-    let diff = diff_disruptions(old_disruptions, &disruptions);
-    for disruption in diff.removed {
-        // Clear up old disruptions from DB
-        if !disruption.id.is_none() {
-            conn.execute("DELETE FROM disruptions WHERE id = ?", (disruption.id.unwrap().to_string(), ))?;
-            info!("Disruption: {} has been removed from DB", disruption.title);
-        }
-    }
+    let diff = differ::diff(old_disruptions, &disruptions);
+    differ::save_diffs_to_db(diff, &conn)?;
     Ok(())
 }
