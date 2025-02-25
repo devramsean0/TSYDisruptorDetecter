@@ -1,5 +1,5 @@
 [package]
-name = "tsy_disruptor_detecter"
+name = "tsy_disrutptions_detector"
 version = "0.1.0"
 edition = "2021"
 
