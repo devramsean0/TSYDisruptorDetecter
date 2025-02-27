@@ -46,4 +46,6 @@ RUN mkdir bin
 COPY --from=cli /usr/src/cli/target/release/tsy_disruptions_detector bin/
 ENV PATH=/usr/src/bot/bin:$PATH
 
+RUN yarn drizzle-kit migrate
+
 CMD [ "yarn", "run", "start" ]
