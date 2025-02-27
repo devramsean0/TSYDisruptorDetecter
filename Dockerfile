@@ -1,4 +1,7 @@
 FROM rust:latest AS cli
+
+LABEL org.opencontainers.image.source="https://github.com/devramsean0/TSYDisruptorDetecter"
+
 WORKDIR /usr/src/cli
 
 COPY cli/Cargo.toml .
@@ -25,7 +28,6 @@ COPY bot/drizzle drizzle/
 COPY bot/drizzle.config.ts drizzle.config.ts
 
 COPY bot/tsup.config.ts tsup.config.ts
-COPY bot/tsconfig.json tsconfig.json
 
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
