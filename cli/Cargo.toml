@@ -7,7 +7,7 @@ edition = "2021"
 dotenv = "0.15.0"
 env_logger = "0.11.6"
 reqwest = { version = "0.12.12", features = ["blocking"] }
-scraper = "0.22.0"
+scraper = "0.23.0"
 log = "0.4.25"
 md5 = "0.7.0"
 rusqlite = { version = "0.33.0", features = ["bundled"] }
