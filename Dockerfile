@@ -24,7 +24,13 @@ COPY bot/src src/
 COPY bot/drizzle drizzle/
 COPY bot/drizzle.config.ts drizzle.config.ts
 
-RUN yarn install --immutable
+COPY bot/tsup.config.ts tsup.config.ts
+COPY bot/tsconfig.json tsconfig.json
+
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
+RUN yarn install --inline-builds
+RUN ls
 RUN yarn build
 
 FROM bot-base AS bot-runner
