@@ -7,10 +7,6 @@ struct Migration {
 fn migrations() -> Vec<Migration> {
     vec![
         Migration {
-            name: "enable_wal_mode",
-            sql: "PRAGMA journal_mode=WAL;"
-        },
-        Migration {
             name: "create_disruptions_table",
             sql: "CREATE TABLE IF NOT EXISTS disruptions (
                 id TEXT PRIMARY KEY,
