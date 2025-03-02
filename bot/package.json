@@ -44,5 +44,5 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "prettier": "@sapphire/prettier-config",
-  "packageManager": "yarn@4.6.0"
+  "packageManager": "yarn@4.7.0"
 }
